@@ -1,288 +1,288 @@
-import fs from "node:fs";
 import path from "node:path";
-import process from "node:process";
-import { createRequire } from "node:module";
 import { files } from "@suseejs/files";
-import { reservedSubdomains } from "./reserve.js";
+import {
+	writeRegisterDNSFiles,
+	writeRemoveDNSFiles,
+	writeUpdateDNSFiles,
+} from "../cloudflare/index.js";
+import type {
+	CnameObject,
+	EntriesObject,
+	PRType,
+	RawObject,
+	SubdomainObject,
+} from "../types.js";
+import { readCache, validCacheWrite } from "./cache.js";
+import { checkSubdomainsObject } from "./check_sd.js";
+import { findDuplicateFiles, readEntries } from "./entries.js";
 
-const require = createRequire(import.meta.url);
-const deepEqual = require("deepequal");
+const getBaseName = (str: string) => path.basename(str).split(".")[0] as string;
 
-interface Subdomain {
-  subdomain: string;
-}
+export const updateCachePath = "cache/temp_update.json";
+export const removeCachePath = "cache/temp_remove.json";
+export const registerCachePath = "cache/temp_register.json";
 
-interface CnameObject extends Subdomain {
-  cname_value: string;
-}
-
-interface SubdomainObject extends CnameObject {
-  github_username: string;
-  register_date: string | Date;
-}
-
-interface RawObject extends SubdomainObject {
-  $schema: string;
-}
-// root
-const cwd = process.cwd();
-const getBaseName = (str: string) => path.basename(str).split(".")[0];
-// cache files
-const cacheFilesPath = "cache/files.json";
-const cacheNamesPath = "cache/names.json";
-const cacheMainPath = "cache/main.json";
-// read cache
-async function readCache() {
-  const cacheFiles = (await files.readFile(cacheFilesPath)).str;
-  const cacheNames = (await files.readFile(cacheNamesPath)).str;
-  const cacheMain = (await files.readFile(cacheMainPath)).str;
-  return {
-    files: (JSON.parse(cacheFiles) ?? []) as string[],
-    names: (JSON.parse(cacheNames) ?? []) as string[],
-    main: (JSON.parse(cacheMain) ?? []) as SubdomainObject[],
-  };
-}
-// write cache
-async function writeCache(
-  main: SubdomainObject[],
-  file: string[],
-  name: string[],
+//github.event.pull_request.body
+// github.event.pull_request.user.login
+export async function validate(
+	dir: string,
+	pr_login: string,
+	pr_type: PRType,
+	dns_api_token: string,
+	zone_Id: string,
 ) {
-  // main
-  await files.writeFile(cacheMainPath, JSON.stringify(main));
-  // files
-  await files.writeFile(cacheFilesPath, JSON.stringify(file));
-  // names
-  await files.writeFile(cacheNamesPath, JSON.stringify(name));
-}
-// read entry dir
-async function readEntries(jsonFiles: string[]) {
-  const objs: RawObject[] = [];
-  for await (const file of jsonFiles) {
-    const filePath = path.resolve(cwd, "subdomains", file);
-    const fileContent = (await files.readFile(filePath)).str;
-    objs.push(JSON.parse(fileContent) as RawObject);
-  }
-  return objs;
-}
-// find duplicate
-async function findDuplicateFiles(items: string[]) {
-  let ok = true;
-  let logMessage = "";
-  const seen = new Set<string>();
-  const duplicates = new Set<string>();
+	let str = `[VALIDATING:OK] Validating passed`;
+	const errors: string[] = [];
+	let ok = true;
+	let newCacheFiles: string[] = [];
+	let newCacheNames: string[] = [];
+	let newCacheMain: SubdomainObject[] = [];
+	// read the entry directory
+	const readEntriesFiles = await readEntries(dir);
+	// check duplicates in entry directory
+	const isDuplicates = await findDuplicateFiles(readEntriesFiles.jsonFiles);
+	if (!isDuplicates.status) {
+		errors.push(
+			`Duplicate JSON files found in the ${dir} directory: [${isDuplicates.errors.join(", ")}]`,
+		);
+	}
+	// handle cache
+	const readCachedDir = readCache();
+	const cacheFiles = await readCachedDir.file();
+	const cacheMain = await readCachedDir.main();
+	const cacheNames = await readCachedDir.name();
+	// filter new register files
+	const newRegisterFiles = readEntriesFiles.jsonFiles.filter(
+		(file) => !cacheFiles.includes(file),
+	);
 
-  for await (const item of items) {
-    if (seen.has(item)) {
-      duplicates.add(item);
-      continue;
-    }
-    seen.add(item);
-  }
+	if (newRegisterFiles.length === 0) {
+		const entriesObjects = readEntriesFiles.entriesObjects;
+		// updated files from entries
+		const updatedFiles = entriesObjects.filter((ent) =>
+			cacheMain.some(
+				(cache) =>
+					ent.sub_domain === cache.sub_domain &&
+					ent.cname_value !== cache.cname_value &&
+					!ent.remove,
+			),
+		); //
+		// remove files from entries
+		const removeFiles = entriesObjects.filter((ent) =>
+			cacheMain.some(
+				(cache) =>
+					ent.sub_domain === cache.sub_domain &&
+					ent.cname_value === cache.cname_value &&
+					ent.remove,
+			),
+		); //
 
-  const error = [...duplicates];
-  if (error.length > 0) {
-    logMessage = `[FAIL] Duplicate JSON files found in the "subdomains" directory: [${error.join(", ")}]\n`;
-    ok = false;
-  }
-  return {
-    ok,
-    logMessage,
-  };
-}
-async function checkSubdomainsObject(ob: RawObject, names?: string[]) {
-  let ok = true;
-  let logMessage = "";
-  // regexp
-  const githubRegex = /(^|\.)github\.io(?:\/.*)?$/i;
-  const vercelRegex = /(^|\.)vercel-dns-[0-9]+\.com(?:\/.*)?$/i;
-  const vercelRegexOld = /^cname\.vercel-dns\.com(?:\/.*)?$/i;
-  const subDomainFormatRegex = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
-  // errors
-  const cnameError: CnameObject[] = [];
-  const formatError: Subdomain[] = [];
-  const reservedError: Subdomain[] = [];
-  const registeredError: Subdomain[] = [];
-  const errorLines: string[] = [];
+		if (updatedFiles.length === 1) {
+			if (pr_type !== "update") {
+				errors.push(
+					`${updatedFiles.length} updated file(s) found, but your PR type on PR body is ${pr_type}`,
+				);
+			}
+			const file = updatedFiles[0] as EntriesObject;
 
-  // cname
-  const cnGH = githubRegex.test(ob.cname_value);
-  const vcNew = vercelRegex.test(ob.cname_value);
-  const vcOld = vercelRegexOld.test(ob.cname_value);
-  if (!cnGH && !vcNew && !vcOld) {
-    cnameError.push({ subdomain: ob.subdomain, cname_value: ob.cname_value });
-  }
-  // subdomain format
-  if (!subDomainFormatRegex.test(ob.subdomain)) {
-    formatError.push({ subdomain: ob.subdomain });
-  }
-  // reserved subdomain
-  if (reservedSubdomains.includes(ob.subdomain)) {
-    reservedError.push({ subdomain: ob.subdomain });
-  }
-  // registered subdomain
-  if (names && names.includes(ob.subdomain)) {
-    registeredError.push({ subdomain: ob.subdomain });
-  }
+			const gu = cacheMain.find((m) => m.sub_domain === file.sub_domain);
+			if (!gu) {
+				errors.push(
+					`Sub-domain "${file.sub_domain}" you want to update dose not exists.`,
+				);
+			}
+			if (gu && gu.github_username !== pr_login) {
+				errors.push(
+					`You have not right to update sub-domain ${file.sub_domain}`,
+				);
+			}
+			const passed = await checkSubdomainsObject(
+				{ sub_domain: file.sub_domain, cname_value: file.cname_value },
+				cacheNames,
+			);
+			if (!passed.status) {
+				errors.push(
+					`Invalid sub-domain or cname_value of sub-domain: ${file.sub_domain} to update`,
+				);
+			}
+			// -------------------------------------------------------------------//
+			// ### RETURN
+			if (errors.length > 0) {
+				str = `[VALIDATING:FAIL] Validating fail :\n${errors.map((m) => `- ${m}\n`)}`;
+				ok = false;
+				return {
+					status: ok,
+					message: str.trimEnd(),
+				};
+			} else {
+				const index = cacheMain.findIndex(
+					(main) => main.sub_domain === file.sub_domain,
+				);
+				if (index !== -1) {
+					(cacheMain[index] as SubdomainObject).cname_value = file.cname_value;
+				}
+				newCacheMain = [...cacheMain];
+				newCacheFiles = [...cacheFiles];
+				newCacheNames = [...cacheNames];
+				await validCacheWrite(newCacheMain, newCacheFiles, newCacheNames);
+				const temp_update_content: CnameObject = {
+					sub_domain: file.sub_domain,
+					cname_value: file.cname_value,
+				};
+				await writeUpdateDNSFiles(temp_update_content, dns_api_token, zone_Id);
+				return {
+					status: ok,
+					message: str.trimEnd(),
+				};
+			}
 
-  if (cnameError.length > 0) {
-    errorLines.push(
-      `[FAIL] Invalid "cname_value":\n${cnameError.map((cn) => `- ${cn.subdomain} : ${cn.cname_value}\n`).join("")}\n`,
-    );
-  }
-  if (formatError.length > 0) {
-    errorLines.push(
-      `[FAIL] Invalid subdomain format:\n${formatError.map((cn) => `- ${cn.subdomain} is not a valid subdomain format.\n`).join("")}\n`,
-    );
-  }
-  if (reservedError.length > 0) {
-    errorLines.push(
-      `[FAIL] Reserved subdomain detected:\n${reservedError.map((cn) => `- ${cn.subdomain} is a reserved subdomain.\n`).join("")}\n`,
-    );
-  }
-  if (registeredError.length > 0) {
-    errorLines.push(
-      `[FAIL] Subdomain already registered:\n${registeredError.map((cn) => `- ${cn.subdomain} is a registered subdomain.\n`).join("")}\n`,
-    );
-  }
-  if (errorLines.length > 0) {
-    ok = false;
-    logMessage = errorLines.join("");
-  }
-  return {
-    ok,
-    logMessage,
-  };
-}
+			// -------------------------------------------------------------------------------------//
+		} else if (removeFiles.length === 1) {
+			if (pr_type !== "remove") {
+				errors.push(
+					`${removeFiles.length} file(s) found to remove, but your PR type on PR body is ${pr_type}`,
+				);
+			}
+			const file = removeFiles[0] as EntriesObject;
 
-export async function validate(dir: string, prOwner: string) {
-  // get json files from directory
-  dir = path.resolve(cwd, dir);
-  const _files = await fs.promises.readdir(dir);
-  const jsonFiles = _files.filter((file) => path.extname(file) === ".json");
-  // check duplicate files from "subdomain" directory
-  const isDuplicate = await findDuplicateFiles(jsonFiles);
+			const gu = cacheMain.find((m) => m.sub_domain === file.sub_domain);
+			if (!gu) {
+				errors.push(
+					`Sub-domain "${file.sub_domain}" you want to remove dose not exists`,
+				);
+			}
+			if (gu && gu.github_username !== pr_login) {
+				errors.push(
+					`You have not right to remove sub-domain ${file.sub_domain}`,
+				);
+			}
+			const passed = await checkSubdomainsObject(
+				{ sub_domain: file.sub_domain, cname_value: file.cname_value },
+				cacheNames,
+			);
+			if (!passed.status) {
+				errors.push(
+					`Invalid sub-domain or cname_value of sub-domain: ${file.sub_domain} to remove`,
+				);
+			}
+			// -------------------------------------------------------------------//
+			// ### RETURN
+			if (errors.length > 0) {
+				str = `[VALIDATING:FAIL] Validating fail :\n${errors.map((m) => `- ${m}\n`)}`;
+				ok = false;
+				return {
+					status: ok,
+					message: str.trimEnd(),
+				};
+			} else {
+				const fileToRemove = cacheFiles.find(
+					(cf) => getBaseName(cf) === file.sub_domain,
+				) as string;
+				const index = cacheMain.findIndex(
+					(main) => main.sub_domain === file.sub_domain,
+				);
+				newCacheMain = cacheMain.splice(index, 1);
+				newCacheFiles = cacheFiles.filter((f) => f !== fileToRemove);
+				newCacheNames = cacheNames.filter((name) => name !== file.sub_domain);
+				await validCacheWrite(newCacheMain, newCacheFiles, newCacheNames);
+				const temp_remove_content: CnameObject = {
+					sub_domain: file.sub_domain,
+					cname_value: file.cname_value,
+				};
+				await writeRemoveDNSFiles(temp_remove_content, dns_api_token, zone_Id);
+				return {
+					status: ok,
+					message: str.trimEnd(),
+				};
+			}
 
-  let newMainContent: SubdomainObject[] = [];
-  let newNamesContent: string[] = [];
-  let newJsonFilesContent: string[] = [];
-  if (!isDuplicate.ok) {
-    console.log(isDuplicate.logMessage);
-    process.exit(1);
-  }
-  // read the cache directory
-  const cached = await readCache();
-  // find new file(s) from entries
-  const newEntryFiles: string[] = jsonFiles.filter(
-    (file) => !cached.files.includes(file),
-  );
-  if (newEntryFiles.length > 1) {
-    console.log(
-      `[FAIL] Only one entry file is allowed. Found "${newEntryFiles.length}" files: [${newEntryFiles.map((ent) => path.relative(process.cwd(), path.join(dir, ent))).join(", ")}].`,
-    );
-    process.exit(1);
-  }
-  if (
-    newEntryFiles.length === 0 &&
-    deepEqual(jsonFiles.sort(), cached.files.sort())
-  ) {
-    // if no new files , may be update
-    const entriesObject = await readEntries(jsonFiles);
-    // filter updated files
-    const updatedFiles = entriesObject.filter((ent) =>
-      cached.main.some(
-        (ma) =>
-          ent.subdomain === ma.subdomain && ent.cname_value !== ma.cname_value,
-      ),
-    );
-    if (updatedFiles.length === 0) {
-      console.error(
-        `[FAIL] No new JSON file was added or no existing file was edited.`,
-      );
-      process.exit(1);
-    } else {
-      for (const file of updatedFiles) {
-        if (file.github_username !== prOwner) {
-          console.error(
-            `[FAIL] You do not have permission to update or edit the subdomain "${file.subdomain}".`,
-          );
-          process.exit(1);
-        }
-        const checkedObject = await checkSubdomainsObject(file);
-        if (!checkedObject.ok) {
-          console.error(checkedObject.logMessage);
-          process.exit(1);
-        }
-        newNamesContent = [...cached.names];
-        newJsonFilesContent = [...cached.files];
-        const index = cached.main.findIndex(
-          (obj) => obj.subdomain === file.subdomain,
-        );
-        let newEntryObject = {} as SubdomainObject;
-        const { $schema: _schema, ...entryWithoutSchema } = file;
-        newEntryObject = entryWithoutSchema as SubdomainObject;
-        if (index !== -1) {
-          cached.main[index] = newEntryObject;
-        } else {
-          cached.main.push(newEntryObject);
-        }
+			// -------------------------------------------------------------------//
+		} else {
+			if (updatedFiles.length === 0 && removeFiles.length === 0) {
+				errors.push(
+					`No new register JSON files (or) no existing file was edited (or) no existing file to remove`,
+				);
+			}
+			if (updatedFiles.length > 1 || removeFiles.length > 1) {
+				errors.push(
+					`More than one update/remove files found, allowed one update/remove request par PR`,
+				);
+			}
+			if (errors.length > 0) {
+				str = `[VALIDATING:FAIL] Validating fail :\n${errors.map((m) => `- ${m}\n`)}`;
+				ok = false;
+			}
 
-        newMainContent = [...cached.main];
-        await writeCache(newMainContent, newJsonFilesContent, newNamesContent);
-        console.log("[OK] Subdomain configuration is valid.");
-      }
-      return;
-    }
-  }
+			return {
+				status: ok,
+				message: str.trimEnd(),
+			};
+		}
+	} else if (newRegisterFiles.length === 1) {
+		const newEntryObject = {} as SubdomainObject;
+		const newEntryPath = path.resolve(
+			path.join(dir, newRegisterFiles[0] as string),
+		);
+		const newEntryContent = (await files.readFile(newEntryPath)).str;
+		const baseName = getBaseName(newEntryPath);
+		const newEntryRawObject = JSON.parse(newEntryContent) as RawObject;
 
-  if (newEntryFiles.length === 0) {
-    console.error(
-      `[FAIL] No new JSON file was added or no existing file was edited.`,
-    );
-    process.exit(1);
-  }
+		if (baseName !== newEntryRawObject.sub_domain) {
+			errors.push(
+				`The JSON file name "${baseName}" must match the subdomain "${newEntryRawObject.sub_domain}"`,
+			);
+		}
+		const checkedObject = await checkSubdomainsObject({
+			sub_domain: newEntryRawObject.sub_domain,
+			cname_value: newEntryRawObject.cname_value,
+		});
+		if (!checkedObject.status) {
+			errors.push(
+				`Invalid sub-domain or cname_value of sub-domain: ${newEntryRawObject.sub_domain} to register`,
+			);
+		}
+		if (errors.length > 0) {
+			str = `[VALIDATING:FAIL] Validating fail :\n${errors.map((m) => `- ${m}\n`)}`;
+			ok = false;
+			return {
+				status: ok,
+				message: str.trimEnd(),
+			};
+		} else {
+			newEntryObject.sub_domain = newEntryRawObject.sub_domain;
+			newEntryObject.cname_value = newEntryRawObject.cname_value;
+			newEntryObject.github_username = pr_login;
+			newEntryObject.cfp = newEntryRawObject.cfp ?? false;
+			newEntryObject.remove = false;
+			newEntryObject.register_date = new Date();
+			//
+			newCacheMain = [newEntryObject, ...cacheMain].sort(
+				(a, b) =>
+					(b.register_date as Date).getTime() -
+					(a.register_date as Date).getTime(),
+			);
+			newCacheFiles = [...newRegisterFiles, ...cacheFiles];
+			newCacheNames = [newEntryRawObject.sub_domain, ...cacheNames];
+			await validCacheWrite(newCacheMain, newCacheFiles, newCacheNames);
+			await writeRegisterDNSFiles(newEntryObject, dns_api_token, zone_Id);
+			return {
+				status: ok,
+				message: str.trimEnd(),
+			};
+		}
+	} else {
+		// falsely exit
+		errors.push(
+			`More than one JSON entries files found, allowed to request one new sub-domain per PR`,
+		);
+		if (errors.length > 0) {
+			str = `[VALIDATING:FAIL] Validating fail :\n${errors.map((m) => `- ${m}\n`)}`;
+			ok = false;
+		}
 
-  let newEntryObject = {} as SubdomainObject;
-  const newEntryPath = path.resolve(path.join(dir, newEntryFiles[0] as string));
-  const newEntryContent = (await files.readFile(newEntryPath)).str;
-  const baseName = getBaseName(newEntryPath);
-  const newEntryRawObject = JSON.parse(newEntryContent) as RawObject;
-
-  if (baseName !== newEntryRawObject.subdomain) {
-    console.error(
-      `[FAIL] The JSON file name "${baseName}" must match the subdomain "${newEntryRawObject.subdomain}".`,
-    );
-    process.exit(1);
-  }
-  if (prOwner !== newEntryRawObject.github_username) {
-    console.error(
-      `[FAIL] GitHub username validation failed. You must be the owner of this repository.`,
-    );
-    process.exit(1);
-  }
-  const checkedObject = await checkSubdomainsObject(
-    newEntryRawObject,
-    cached.names,
-  );
-  if (!checkedObject.ok) {
-    console.error(checkedObject.logMessage);
-    process.exit(1);
-  }
-
-  const { $schema: _schema, ...entryWithoutSchema } = newEntryRawObject;
-  newEntryObject = entryWithoutSchema as SubdomainObject;
-  newNamesContent = [newEntryObject.subdomain, ...cached.names];
-  newJsonFilesContent = [...newEntryFiles, ...cached.files];
-  const index = cached.main.findIndex(
-    (obj) => obj.subdomain === newEntryObject.subdomain,
-  );
-  if (index !== -1) {
-    cached.main[index] = newEntryObject;
-  } else {
-    cached.main.push(newEntryObject);
-  }
-
-  newMainContent = [...cached.main];
-  await writeCache(newMainContent, newJsonFilesContent, newNamesContent);
-  console.log("[OK] Subdomain configuration is valid.");
+		return {
+			status: ok,
+			message: str.trimEnd(),
+		};
+	}
 }

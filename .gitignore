@@ -2,3 +2,6 @@ node_modules
 aa.ts
 subdomains
 schema
+.env
+bb.ts
+aa.json
