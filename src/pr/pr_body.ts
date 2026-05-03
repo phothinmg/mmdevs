@@ -1,6 +1,6 @@
 import type { PRType } from "../types.js";
 
-const unwrapAutolink = (value: string) =>
+export const unwrapAutolink = (value: string) =>
   value.replace(/^<([^>]+)>$/, "$1").trim();
 
 export function checkPrRequestBody(body: string) {
@@ -77,7 +77,7 @@ export function checkPrRequestBody(body: string) {
   let str = "PR template fields are valid.";
   let ok = true;
   if (failures.length > 0) {
-    str = `[PR_TEMPLATE:FAIL] PR template validation failed:\n- ${failures.join("\n- ")}`;
+    str = `PR template validation failed:\n- ${failures.join("\n- ")}`;
     ok = false;
   }
   if (pr_type === undefined) {
