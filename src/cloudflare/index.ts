@@ -2,9 +2,9 @@ import { files } from "@suseejs/files";
 import type { CnameObject, SubdomainObject } from "../types.js";
 import { mmdns } from "./mmdns.js";
 
-const updateCachePath = "cache/update.json";
-const removeCachePath = "cache/remove.json";
-const registerCachePath = "cache/register.json";
+const updateCachePath = "cache/update_dns.json";
+const removeCachePath = "cache/remove_dns.json";
+const registerCachePath = "cache/register_dns.json";
 
 const isInDNSList = async (
   sub_domain: string,
