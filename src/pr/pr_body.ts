@@ -74,10 +74,10 @@ export function checkPrRequestBody(body: string) {
       }
     }
   } // page_repo
-  let str = "PR template fields are valid.";
+  let str = "✅ PR template fields are valid.";
   let ok = true;
   if (failures.length > 0) {
-    str = `PR template validation failed:\n- ${failures.join("\n- ")}`;
+    str = `❌ PR template validation failed:\n- ${failures.join("\n- ")}`;
     ok = false;
   }
   if (pr_type === undefined) {

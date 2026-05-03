@@ -37,12 +37,11 @@ class GithubRest {
       repo: this._repo,
       issue_number: this._pull_number,
     });
-    const commentBody = `[bot] workflow error report\n\nJob : ${context.job}\nMessage : ${comment_body}\nRun : ${runUrl}`;
+    const commentBody = `[BOT] Workflow Report\n\nJob : ${context.job}\nMessage : ${comment_body}\nRun : ${runUrl}`;
     const existing = [...comments].reverse().find((comment) => {
       const body = comment.body || "";
       return (
-        comment.user?.type === "Bot" &&
-        body.includes("[bot] workflow error report")
+        comment.user?.type === "Bot" && body.includes("[BOT] Workflow Report")
       );
     });
     if (existing) {
@@ -70,11 +69,11 @@ class GithubRest {
     const location = (user.location || "").toLowerCase();
     if (!location.includes("myanmar")) {
       await this.commentToJob(
-        `User ${username} must have location containing "Myanmar". Current profile location: "${user.location || "(empty)"}"`,
+        `❌ User ${username} must have location containing "Myanmar".\nCurrent profile location: "${user.location || "(empty)"}"`,
       );
       process.exit(1);
     } else {
-      await this.commentToJob(`PR user location is valid: ${user.location}`);
+      await this.commentToJob(`✅ PR user location is valid: ${user.location}`);
       return;
     }
   }

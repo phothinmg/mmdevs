@@ -28,7 +28,7 @@ export async function entry(
   status: boolean;
   message: string;
 }> {
-  let str = `Entries check passed`;
+  let str = `✅ Entries check passed`;
   const errors: string[] = [];
   let ok = true;
   let newCacheFiles: string[] = [];
@@ -105,7 +105,7 @@ export async function entry(
       // -------------------------------------------------------------------//
       // ### RETURN
       if (errors.length > 0) {
-        str = `Validation failed:
+        str = `❌ Entries check failed :\n
 ${errors.map((m) => `- ${m}\n`)}`;
         ok = false;
         return {
@@ -166,7 +166,7 @@ ${errors.map((m) => `- ${m}\n`)}`;
       // -------------------------------------------------------------------//
       // ### RETURN
       if (errors.length > 0) {
-        str = `Validation failed:
+        str = `❌ Entries check failed :\n
 ${errors.map((m) => `- ${m}\n`)}`;
         ok = false;
         return {
@@ -208,7 +208,7 @@ ${errors.map((m) => `- ${m}\n`)}`;
         );
       }
       if (errors.length > 0) {
-        str = `Validation failed:
+        str = `❌ Entries check failed :\n
 ${errors.map((m) => `- ${m}\n`)}`;
         ok = false;
       }
@@ -242,7 +242,7 @@ ${errors.map((m) => `- ${m}\n`)}`;
       );
     }
     if (errors.length > 0) {
-      str = `Validation failed:
+      str = `❌ Entries check failed :\n
 ${errors.map((m) => `- ${m}\n`)}`;
       ok = false;
       return {
@@ -277,7 +277,7 @@ ${errors.map((m) => `- ${m}\n`)}`;
       `More than one JSON entries files found, allowed to request one new sub-domain per PR`,
     );
     if (errors.length > 0) {
-      str = `Entries check failed:
+      str = `❌ Entries check failed :\n
 ${errors.map((m) => `- ${m}\n`)}`;
       ok = false;
     }
