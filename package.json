@@ -14,7 +14,6 @@
 	"dependencies": {
 		"@actions/github": "^9.1.1",
 		"@octokit/core": "^7.0.6",
-		"@octokit/rest": "^22.0.1",
 		"@suseejs/files": "^0.0.4",
 		"cloudflare": "^5.2.0"
 	},
