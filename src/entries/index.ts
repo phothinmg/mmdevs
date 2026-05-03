@@ -34,6 +34,7 @@ export async function entry(
   let newCacheFiles: string[] = [];
   let newCacheNames: string[] = [];
   let newCacheMain: SubdomainObject[] = [];
+  let newCacheCheckNames: string[] = [];
   // read the entry directory
   const readEntriesFiles = await readEntries(dir);
   // check duplicates in entry directory
@@ -48,6 +49,7 @@ export async function entry(
   const cacheFiles = await readCachedDir.file();
   const cacheMain = await readCachedDir.main();
   const cacheNames = await readCachedDir.name();
+  const cacheCheckNames = await readCachedDir.checkNames();
   // filter new register files
   const newRegisterFiles = readEntriesFiles.jsonFiles.filter(
     (file) => !cacheFiles.includes(file),
@@ -122,7 +124,13 @@ ${errors.map((m) => `- ${m}\n`)}`;
         newCacheMain = [...cacheMain];
         newCacheFiles = [...cacheFiles];
         newCacheNames = [...cacheNames];
-        await validCacheWrite(newCacheMain, newCacheFiles, newCacheNames);
+        newCacheCheckNames = [...cacheCheckNames];
+        await validCacheWrite(
+          newCacheMain,
+          newCacheFiles,
+          newCacheNames,
+          newCacheCheckNames,
+        );
         const temp_update_content: CnameObject = {
           sub_domain: file.sub_domain,
           cname_value: file.cname_value,
@@ -183,12 +191,21 @@ ${errors.map((m) => `- ${m}\n`)}`;
         newCacheMain = cacheMain.splice(index, 1);
         newCacheFiles = cacheFiles.filter((f) => f !== fileToRemove);
         newCacheNames = cacheNames.filter((name) => name !== file.sub_domain);
-        await validCacheWrite(newCacheMain, newCacheFiles, newCacheNames);
+        newCacheCheckNames = cacheCheckNames.filter(
+          (name) => name !== file.sub_domain,
+        );
+        await validCacheWrite(
+          newCacheMain,
+          newCacheFiles,
+          newCacheNames,
+          newCacheCheckNames,
+        );
         const temp_remove_content: CnameObject = {
           sub_domain: file.sub_domain,
           cname_value: file.cname_value,
         };
         await writeRemoveDNSFiles(temp_remove_content, dns_api_token, zone_Id);
+        await files.deleteFile(fileToRemove);
         return {
           status: ok,
           message: str.trimEnd(),
@@ -264,7 +281,13 @@ ${errors.map((m) => `- ${m}\n`)}`;
       );
       newCacheFiles = [...newRegisterFiles, ...cacheFiles];
       newCacheNames = [newEntryRawObject.sub_domain, ...cacheNames];
-      await validCacheWrite(newCacheMain, newCacheFiles, newCacheNames);
+      newCacheCheckNames = [newEntryRawObject.sub_domain, ...cacheCheckNames];
+      await validCacheWrite(
+        newCacheMain,
+        newCacheFiles,
+        newCacheNames,
+        newCacheCheckNames,
+      );
       await writeRegisterDNSFiles(newEntryObject, dns_api_token, zone_Id);
       return {
         status: ok,

@@ -1,9 +1,10 @@
 import { files } from "@suseejs/files";
-import type { DNSObjects, SubdomainObject } from "../types.js";
+import type { SubdomainObject } from "../types.js";
 // cache files
 export const cacheFilesPath = "cache/files.json";
 export const cacheNamesPath = "cache/names.json";
 export const cacheMainPath = "cache/main.json";
+export const cacheCheckNamesPath = "cache/check_names.json";
 
 // read cache
 export function readCache() {
@@ -20,6 +21,10 @@ export function readCache() {
       const cacheMain = (await files.readFile(cacheMainPath)).str;
       return (JSON.parse(cacheMain) ?? []) as SubdomainObject[];
     },
+    checkNames: async () => {
+      const cacheCheckNames = (await files.readFile(cacheCheckNamesPath)).str;
+      return (JSON.parse(cacheCheckNames) ?? []) as string[];
+    },
   };
 }
 
@@ -29,8 +34,10 @@ export async function validCacheWrite(
   main: SubdomainObject[],
   file: string[],
   name: string[],
+  checkNames: string[],
 ) {
   await files.writeFile(cacheMainPath, JSON.stringify(main));
   await files.writeFile(cacheFilesPath, JSON.stringify(file));
   await files.writeFile(cacheNamesPath, JSON.stringify(name));
+  await files.writeFile(cacheCheckNamesPath, JSON.stringify(checkNames));
 }

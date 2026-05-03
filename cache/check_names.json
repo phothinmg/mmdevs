@@ -1,18 +1,4 @@
-/**
- * Reserved sub-domain labels that cannot be claimed through this registry.
- *
- * The list protects generic, operational, or high-value names such as `api`,
- * `admin`, and `blog` from accidental or inappropriate assignment.
- *
- * This list is consumed by src/index.js during validation.
- * It is intentionally lowercase because validation compares keys
- * case-insensitively.
- *
- * Source inspiration:
- * https://github.com/js-org/js.org/blob/master/records_restricted.js
- */
-
-export const reservedSubdomains: string[] = [
+[
   "app",
   "apps",
   "admin",
@@ -180,7 +166,6 @@ export const reservedSubdomains: string[] = [
   "license",
   "like",
   "link",
-  //
   "learning",
   "legals",
   "lessons",
@@ -188,14 +173,12 @@ export const reservedSubdomains: string[] = [
   "licenses",
   "likes",
   "links",
-  //
   "live",
   "log",
   "login",
   "logo",
   "logout",
   "loop",
-  //
   "logs",
   "logos",
   "loops",
@@ -251,7 +234,6 @@ export const reservedSubdomains: string[] = [
   "project",
   "prototype",
   "pub",
-  //
   "portals",
   "professionals",
   "programs",
@@ -362,5 +344,5 @@ export const reservedSubdomains: string[] = [
   "webmail",
   "webmaster",
   "world",
-  "myanmar",
-];
+  "myanmar"
+]
