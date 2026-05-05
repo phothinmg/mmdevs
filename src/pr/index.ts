@@ -200,9 +200,7 @@ class GithubPR {
     const filteredFiles = pr_files.filter(
       (f) =>
         f.filename.startsWith("subdomains/") &&
-        (path.posix.extname(f.filename) === ".json" ||
-          path.posix.extname(f.filename) === ".jsonc") &&
-        path.posix.basename(f.filename) !== "example.jsonc" &&
+        path.posix.extname(f.filename) === ".json" &&
         allowedStatuses.has(f.status),
     );
     if (filteredFiles.length === 0) {
@@ -225,8 +223,11 @@ class GithubPR {
         ref: context.payload.pull_request?.head.sha,
       });
       if (!Array.isArray(data) && data.type === "file") {
-        const file_content = data.content;
-        const fileContent = JSON.parse(file_content) as RawSubdomains;
+        const fileContentText = Buffer.from(
+          data.content,
+          data.encoding === "base64" ? "base64" : "utf8",
+        ).toString("utf8");
+        const fileContent = JSON.parse(fileContentText) as RawSubdomains;
         content.sub_domain = fileContent.sub_domain;
         content.cname_value = fileContent.cname_value;
         content.request_type = fileContent.request_type;
