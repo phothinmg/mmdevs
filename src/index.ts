@@ -1,6 +1,4 @@
-import { entry } from "./entries/index.js";
-import { GithubRest } from "./pr/index.js";
-import type { PRType } from "./types.js";
+import { GithubPR } from "./pr/index.js";
 
 async function checkPrBody(
   gh_token: string,
@@ -8,7 +6,7 @@ async function checkPrBody(
   repo_name: string,
   pr_number: string,
 ): Promise<void> {
-  const gh = new GithubRest(gh_token, repo_owner, repo_name, pr_number);
+  const gh = new GithubPR(gh_token, repo_owner, repo_name, pr_number);
   await gh.checkPrBody();
 }
 async function checkPrUser(
@@ -17,7 +15,7 @@ async function checkPrUser(
   repo_name: string,
   pr_number: string,
 ): Promise<void> {
-  const gh = new GithubRest(gh_token, repo_owner, repo_name, pr_number);
+  const gh = new GithubPR(gh_token, repo_owner, repo_name, pr_number);
   await gh.checkUserLocation();
 }
 
@@ -30,17 +28,8 @@ async function checkEntries(
   repo_name: string,
   pr_number: string,
 ) {
-  const gh = new GithubRest(gh_token, repo_owner, repo_name, pr_number);
-  const pr_login = await gh.getPrUser();
-  const pr_type = (await gh.getPrType()) as PRType;
-  const checked = await entry(dir, pr_login, pr_type, dns_api_token, zone_Id);
-  if (!checked.status) {
-    await gh.commentToJob(checked.message);
-    process.exit(1);
-  } else {
-    await gh.commentToJob(checked.message);
-    return;
-  }
+  const gh = new GithubPR(gh_token, repo_owner, repo_name, pr_number);
+  await gh.managePrFiles();
 }
 
 export { checkEntries, checkPrBody, checkPrUser };

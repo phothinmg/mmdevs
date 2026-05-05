@@ -1,83 +1,106 @@
 import { files } from "@suseejs/files";
-import type { CnameObject, SubdomainObject } from "../types.js";
-import { mmdns } from "./mmdns.js";
+import Cloudflare from "cloudflare";
 
-const updateCachePath = "cache/update_dns.json";
-const removeCachePath = "cache/remove_dns.json";
-const registerCachePath = "cache/register_dns.json";
-
-const isInDNSList = async (
-  sub_domain: string,
-  api_token: string,
-  zone_Id: string,
-) => (await mmdns(api_token, zone_Id).findRecord(sub_domain)).exists;
-
-export async function readRegisterDNSFiles() {
-  const str = (await files.readFile(registerCachePath)).str;
-  return JSON.parse(str) as SubdomainObject[];
-}
-export async function readUpdateDNSFiles() {
-  const str = (await files.readFile(updateCachePath)).str;
-  return JSON.parse(str) as CnameObject[];
-}
-export async function readRemoveDNSFiles() {
-  const str = (await files.readFile(removeCachePath)).str;
-  return JSON.parse(str) as CnameObject[];
-}
-// ------------------------------------------------------
-export async function writeRegisterDNSFiles(
-  obj: SubdomainObject,
-  api_token: string,
-  zone_Id: string,
-) {
-  const oldDnsRecords = await readRegisterDNSFiles();
-  let newDnsRecords = [obj, ...oldDnsRecords];
-  const found = newDnsRecords.find(
-    async (m) => await isInDNSList(m.sub_domain, api_token, zone_Id),
-  );
-  if (found) {
-    const index = newDnsRecords.findIndex(
-      (m) => m.sub_domain === found.sub_domain,
-    );
-    newDnsRecords = newDnsRecords.splice(index, 1);
+class MmDNS {
+  private _cf: Cloudflare;
+  private _zoneId: string;
+  private _errors: string[];
+  private _str: string;
+  constructor(api_token: string, zone_Id: string) {
+    this._cf = new Cloudflare({ apiToken: api_token });
+    this._zoneId = zone_Id;
+    this._errors = [];
+    this._str = `✅ All dns process are passed`;
   }
-  await files.writeFile(registerCachePath, JSON.stringify(newDnsRecords));
-}
-export async function writeUpdateDNSFiles(
-  obj: CnameObject,
-  api_token: string,
-  zone_Id: string,
-) {
-  const oldDnsRecords = await readUpdateDNSFiles();
-  let newDnsRecords = [obj, ...oldDnsRecords];
-  const found = newDnsRecords.find(
-    async (m) => await isInDNSList(m.sub_domain, api_token, zone_Id),
-  );
-  if (found) {
-    const index = newDnsRecords.findIndex(
-      (m) => m.sub_domain === found.sub_domain,
-    );
-    newDnsRecords = newDnsRecords.splice(index, 1);
+  async list(): Promise<Cloudflare.DNS.Records.RecordResponse[]> {
+    const records = await this._cf.dns.records.list({ zone_id: this._zoneId });
+    return records.result;
   }
-  await files.writeFile(updateCachePath, JSON.stringify(newDnsRecords));
-}
-export async function writeRemoveDNSFiles(
-  obj: CnameObject,
-  api_token: string,
-  zone_Id: string,
-) {
-  const oldDnsRecords = await readRemoveDNSFiles();
-  let newDnsRecords = [obj, ...oldDnsRecords];
-  const found = newDnsRecords.find(
-    async (m) => await isInDNSList(m.sub_domain, api_token, zone_Id),
-  );
-  if (found) {
-    const index = newDnsRecords.findIndex(
-      (m) => m.sub_domain === found.sub_domain,
-    );
-    newDnsRecords = newDnsRecords.splice(index, 1);
+  async writeList(filePath: string) {
+    const dnsList = await this.list();
+    await files.writeFile(filePath, JSON.stringify(dnsList));
   }
-  await files.writeFile(removeCachePath, JSON.stringify(newDnsRecords));
+  async createCname(subdomain: string, cnameValue: string, cfp = false) {
+    const sub_domain = `${subdomain}.mmdevs.org`;
+    const record = await this._cf.dns.records.create({
+      zone_id: this._zoneId,
+      type: "CNAME",
+      name: sub_domain,
+      content: cnameValue,
+      ttl: 1,
+      proxied: cfp,
+    });
+    this._str = `✅ Created subdomain : ${sub_domain} with ID : ${record.id}`;
+    return this;
+  }
+  async findRecord(subdomain: string) {
+    const sub_domain = `${subdomain}.mmdevs.org`;
+    const recordsList = await this.list();
+    const found = recordsList.find(
+      (rec) => rec.content && rec.name === sub_domain,
+    );
+    const exists = !!found;
+    return { exists, record: found };
+  }
+  async updateCname(subdomain: string, cnameValue: string) {
+    const sub_domain = `${subdomain}.mmdevs.org`;
+    const found = await this.findRecord(subdomain);
+    if (!found.exists || !found.record) {
+      this._errors.push(
+        `Records for "${sub_domain}" dose not exists on DNS or error on search`,
+      );
+    }
+    if (this._errors.length > 0) {
+      return this;
+    }
+    if (found.record) {
+      if (found.record.content && found.record.content === cnameValue) {
+        this._str = `Cname target want to update "${cnameValue}" is up to date`;
+        return this;
+      } else {
+        await this._cf.dns.records.update(found.record.id, {
+          zone_id: this._zoneId,
+          type: "CNAME",
+          name: found.record.name,
+          content: cnameValue,
+          ttl: 1,
+          proxied: found.record.proxied ?? false,
+        });
+        this._str = `✅ Updated subdomain : "${found.record.name}" with CNAME target : "${cnameValue}"`;
+        return this;
+      }
+    } else {
+      return this;
+    }
+  }
+  async removeCname(subdomain: string) {
+    const sub_domain = `${subdomain}.mmdevs.org`;
+    const found = await this.findRecord(subdomain);
+    if (!found.exists || !found.record) {
+      this._errors.push(
+        `Records for "${sub_domain}" dose not exists on DNS or error on search`,
+      );
+    }
+    if (this._errors.length > 0) {
+      return this;
+    }
+    if (found.record) {
+      await this._cf.dns.records.delete(found.record.id, {
+        zone_id: this._zoneId,
+      });
+      this._str = `✅ Removed subdomain : "${found.record.name}"`;
+      return this;
+    } else {
+      return this;
+    }
+  }
+  public get message() {
+    if (this._errors.length > 0) {
+      this._str = `❌ Fail dns processes :\n${this._errors.map((m) => `- ${m}\n`)}`;
+    }
+    return this._str.trimEnd();
+  }
 }
 
-// --------------------------------------------------------------
+export const mmdns = (api_token: string, zone_Id: string) =>
+  new MmDNS(api_token, zone_Id);

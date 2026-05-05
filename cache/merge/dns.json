@@ -1,0 +1,32 @@
+[
+  {
+    "id": "671eaf67d5c09307752ec9d72663bd46",
+    "name": "maharbote.mmdevs.org",
+    "type": "CNAME",
+    "content": "2acdf103a17778c7.vercel-dns-017.com",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": { "flatten_cname": false },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-04-26T13:21:22.36015Z",
+    "modified_on": "2026-04-26T13:21:22.36015Z"
+  },
+  {
+    "id": "aa01aba0886b01959f3a9dcd7b73e81d",
+    "name": "thingyan.mmdevs.org",
+    "type": "CNAME",
+    "content": "phothinmg.github.io",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": { "flatten_cname": false },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-04-26T12:17:37.769921Z",
+    "modified_on": "2026-05-03T23:35:52.25778Z"
+  }
+]
