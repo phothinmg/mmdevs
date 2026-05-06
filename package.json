@@ -20,6 +20,7 @@
 	"scripts": {
 		"build": "susee",
 		"lint": "biome check src --write",
-		"fmt": "biome format --write"
+		"fmt": "biome format --write",
+		"opt": "node opt_build.mjs"
 	}
 }

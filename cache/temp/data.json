@@ -1,1 +1,9 @@
-[]
+{
+	"temp_object": [
+		{
+			"sub_domain": "example",
+			"cname_value": "example.github.io",
+			"request_type": "register"
+		}
+	]
+}

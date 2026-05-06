@@ -43,5 +43,5 @@
     "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "include": ["src/**/*", "aa.ts", "bb.ts", "lib/*", "opt/*"]
+  "include": ["s/**/*", "aa.ts", "bb.ts", "lib/*", "opt/*"]
 }

@@ -1,32 +1,58 @@
-import { GithubPR } from "./pr/index.js";
+import { checkEntries } from "./entries.js";
+import { checkUserLocation, createComment } from "./github.js";
+import { checkPrBody } from "./pr_body.js";
 
-async function checkPrBody(
-  gh_token: string,
-  repo_owner: string,
-  repo_name: string,
-  pr_number: string,
+async function checkPullRequestBody(
+	gh_token: string,
+	repo_owner: string,
+	gh_repo: string,
+	pr_number: string,
+	pr_body: string,
 ): Promise<void> {
-  const gh = new GithubPR(gh_token, repo_owner, repo_name, pr_number);
-  await gh.checkPrBody();
+	const commentCreator = createComment(
+		gh_token,
+		repo_owner,
+		gh_repo,
+		pr_number,
+	);
+	const checked = checkPrBody(pr_body);
+	if (!checked.status) {
+		await commentCreator.commentToWF(checked.message.error, true);
+		return;
+	} else {
+		await commentCreator.commentToWF(checked.message.passed, false);
+		return;
+	}
 }
-async function checkPrUser(
-  gh_token: string,
-  repo_owner: string,
-  repo_name: string,
-  pr_number: string,
-): Promise<void> {
-  const gh = new GithubPR(gh_token, repo_owner, repo_name, pr_number);
-  await gh.checkUserLocation();
+//
+function checkEntryFile(
+	gh_token: string,
+	repo_owner: string,
+	gh_repo: string,
+	pr_number: string,
+	gh_user: string,
+	gh_id: number,
+): {
+	check: (entryDir: string) => Promise<void>;
+} {
+	const commentCreator = createComment(
+		gh_token,
+		repo_owner,
+		gh_repo,
+		pr_number,
+	);
+	const check = async (entryDir: string) => {
+		const checked = await checkEntries(entryDir, gh_user, gh_id);
+		if (!checked.status) {
+			await commentCreator.commentToWF(checked.message.error, true);
+			return;
+		} else {
+			await commentCreator.commentToWF(checked.message.passed, false);
+			return;
+		}
+	};
+	return { check };
 }
 
-async function checkEntries(
-  gh_token: string,
-  repo_owner: string,
-  repo_name: string,
-  pr_number: string,
-) {
-  const gh = new GithubPR(gh_token, repo_owner, repo_name, pr_number);
-  await gh.managePrFiles();
-}
-
-export { checkEntries, checkPrBody, checkPrUser };
+//
+export { checkEntryFile, checkPullRequestBody, checkUserLocation };

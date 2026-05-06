@@ -1,1 +1,15 @@
-{}
+{
+	"example": {
+		"github_id": 123,
+		"github_user": "example",
+		"cname_value": "example.github.io",
+		"cname_history": [
+			{ "value": "example.github.io", "date": "2026-04-26T12:17:37.769921Z" }
+		],
+		"created_on": "2026-04-26T12:17:37.769921Z",
+		"modified_on": "2026-04-26T12:17:37.769921Z",
+		"dns_recorded": false,
+		"last_request_type": "register",
+		"json_file_name": "example.json"
+	}
+}
