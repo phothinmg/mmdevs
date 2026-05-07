@@ -8,8 +8,10 @@ export const createComment = (
 ) => {
   const github = getOctokit(gh_token);
   const commentToWF = async (comment_body: string, error: boolean) => {
-    const isError = error ? "Error" : "Passed";
-    const symbol = error ? "❌" : "✅";
+    const isError = error
+      ? `$\\color{red}\\text{ERROR}$`
+      : `$\\color{green}\\text{PASSED}$`;
+    //const symbol = error ? "❌" : "✅";
     const runUrl = `${context.serverUrl}/${repo_owner}/${gh_repo}/actions/runs/${context.runId}`;
     //
     const { data: comments } = await github.rest.issues.listComments({
@@ -18,13 +20,13 @@ export const createComment = (
       issue_number: parseInt(pr_number, 10),
     });
     //
-    const commentBody = `[${symbol}] Workflow ${isError} Report\n\nStep : ${context.action}\nMessage : ${comment_body}\nRun URL : ${runUrl}`;
+    const commentBody = `[${isError}] Workflow Report\n\nStep : ${context.action}\nMessage : ${comment_body}\nRun URL : ${runUrl}`;
     //
     const existing = [...comments].reverse().find((comment) => {
       const body = comment.body || "";
       return (
         comment.user?.type === "Bot" &&
-        body.includes(`[${symbol}] Workflow ${isError} Report`)
+        body.includes(`[${isError}] Workflow Report`)
       );
     }); //
     if (existing) {

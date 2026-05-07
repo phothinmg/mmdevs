@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { files as suseeFiles } from "@suseejs/files";
 import type {
   CacheDatabaseFile,
@@ -14,10 +15,56 @@ import type {
 } from "./types.js";
 
 // cache
-const cachePrSubdomainsPath = "cache/pr/sub_domains.json";
-const cachePrDatabasePath = "cache/pr/database.json";
-const cachePrJsonFilesPath = "cache/pr/files.json";
-const cacheTempDataPath = "cache/temp/data.json";
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const packageRootDir = path.resolve(moduleDir, "..");
+const cacheDir = path.resolve(packageRootDir, "cache");
+const cachePrSubdomainsPath = path.resolve(cacheDir, "pr/sub_domains.json");
+const cachePrDatabasePath = path.resolve(cacheDir, "pr/database.json");
+const cachePrJsonFilesPath = path.resolve(cacheDir, "pr/files.json");
+const cacheTempDataPath = path.resolve(cacheDir, "temp/data.json");
+
+// Ensure cache directories and files exist
+function ensureCacheStructure() {
+  const requiredDirs = [
+    path.dirname(cachePrSubdomainsPath),
+    path.dirname(cachePrDatabasePath),
+    path.dirname(cachePrJsonFilesPath),
+    path.dirname(cacheTempDataPath),
+  ];
+
+  const requiredFiles = [
+    {
+      path: cachePrSubdomainsPath,
+      defaultContent: JSON.stringify({ registered: [], reserved: [] }),
+    },
+    { path: cachePrDatabasePath, defaultContent: JSON.stringify({}) },
+    {
+      path: cachePrJsonFilesPath,
+      defaultContent: JSON.stringify({ json_files: [] }),
+    },
+    {
+      path: cacheTempDataPath,
+      defaultContent: JSON.stringify({ temp_object: [] }),
+    },
+  ];
+
+  // Create directories if missing
+  for (const dir of requiredDirs) {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  }
+
+  // Create files with default content if missing
+  for (const file of requiredFiles) {
+    if (!fs.existsSync(file.path)) {
+      fs.writeFileSync(file.path, file.defaultContent);
+    }
+  }
+}
+
+// Call ensureCacheStructure during module initialization
+ensureCacheStructure();
 
 export async function readTempCacheData() {
   const str = (await suseeFiles.readFile(cacheTempDataPath)).str;
